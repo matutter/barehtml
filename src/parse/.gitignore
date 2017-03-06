@@ -1,0 +1,4 @@
+# the sources generated from flex & bison
+*.c
+*.h
+*.output
