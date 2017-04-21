@@ -1,7 +1,6 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
-  #include <stdio.h>
 
   #define KRST  "\x1B[0m"
   #define KRED  "\x1B[31m"
@@ -12,8 +11,18 @@
   #define KCYN  "\x1B[36m"
   #define KWHT  "\x1B[37m"
 
-  #define debug(fmt, args...) \
-    printf(fmt KRST "\n", ##args);
+  #if defined(DEBUG_ON)
+
+    #include <stdio.h>
+    #define debug(fmt, args...) \
+      printf(fmt KRST "\n", ##args);
+
+  #else
+
+    #define debug(fmt, args...) 
+
+  #endif
+
 
   #define debug_info(fmt, args...) \
     debug(KCYN fmt, ##args)
