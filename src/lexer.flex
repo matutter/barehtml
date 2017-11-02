@@ -3,15 +3,14 @@
   #include <stdio.h>
   #include <ctype.h>
   #include "debug.h"
-  #include "parse/libini.types.h"
-  #include "parse/libini.tab.h"
+  #include "tinyxml.h"
+  #include "tinyxml.tab.h"
 
   char* yy_strim_ws(char*);
 
 %}
 
 
-%option outfile="libini.yy.c" header-file="libini.yy.h"
 %option warn nodefault
 %option reentrant noyywrap never-interactive nounistd bison-bridge
  

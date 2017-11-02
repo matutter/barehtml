@@ -1,26 +1,28 @@
 .RECIPEPREFIX = |
-.PHONY: all clean run setup generate_sources
+.PHONY: test
 
 CC    = gcc
 CINCL = -Isrc
-CPPFLAGS = -DDEBUG_ON
+CCFLAGS = -DDEBUG_ON -Wfatal-errors
 
-SOURCES = $(wildcard src/parse/*.c)
+tinyxml.o: src/tinyxml.c src/tinyxml.yy.c src/tinyxml.tab.c
+| ${CC} ${CCFLAGS} ${CINCL} -o $@ $^
 
-all: setup generate_sources main.o
+src/tinyxml.yy.c: src/lexer.flex
+| flex --header-file -o $@ -vd $^
 
-main.o: src/main.c
-| ${CC} ${CPPFLAGS} ${CINCL} ${SOURCES} src/main.c -o main.o
+src/tinyxml.tab.c: src/parser.bison
+| bison --defines -o $@ $^
 
-setup:
+main.test: test/main.c tinyxml.o
+| ${CC} ${CCFLAGS} ${CINCL} -o $@ $^
 
-generate_sources:
-| make -C src/parse/ all
+test: main.test
+| ./main.test
 
 clean:
-| make -C src/parse/ clean
-| rm -f main.o
+| rm -f main.test src/tinyxml.yy.h src/tinyxml.yy.c src/tinyxml.tab.c src/tinyxml.tab.h
 
-run: all
-| ./main.o test/sample.ini
+
+
 

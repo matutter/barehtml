@@ -1,2 +1,8 @@
 *.o
 build/
+# the sources generated from flex & bison
+*.tab.c
+*.yy.c
+*.tab.h
+*.yy.h
+*.output

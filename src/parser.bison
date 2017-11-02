@@ -1,9 +1,6 @@
-%output  "libini.tab.c"
-%defines "libini.tab.h"
-
 %code requires {
   
-  #include "parse/libini.types.h"
+  #include "tinyxml.h"
   #ifndef YY_TYPEDEF_YY_SCANNER_T
   #define YY_TYPEDEF_YY_SCANNER_T
     typedef void* yyscan_t;
@@ -14,8 +11,8 @@
 %{
  
   #include "debug.h"
-  #include "parse/libini.tab.h"
-  #include "parse/libini.yy.h"
+  #include "tinyxml.tab.h"
+  #include "tinyxml.yy.h"
  
   int yyerror(Object** objects, yyscan_t scanner, const char *msg);
  
