@@ -6,3 +6,4 @@ build/
 *.tab.h
 *.yy.h
 *.output
+main.test

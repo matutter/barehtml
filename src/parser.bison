@@ -1,6 +1,6 @@
 %code requires {
   
-  #include "tinyxml.h"
+  #include "tinyxml.types.h"
   #ifndef YY_TYPEDEF_YY_SCANNER_T
   #define YY_TYPEDEF_YY_SCANNER_T
     typedef void* yyscan_t;
@@ -14,78 +14,101 @@
   #include "tinyxml.tab.h"
   #include "tinyxml.yy.h"
  
-  int yyerror(Object** objects, yyscan_t scanner, const char *msg);
+  int yyerror(doc_t* doc, yyscan_t scanner, const char *msg);
  
 %}
 
 %define       api.pure full
-%lex-param    { yyscan_t scanner }
-%parse-param  { Object** objects }
-%parse-param  { yyscan_t scanner }
+%lex-param    { void * scanner }
+%parse-param  { doc_t* doc }
+%parse-param  { void * scanner }
 
 %union {
-  char* raw;
-  Object* obj;
-  Property* prop;
+  doc_t* doc;
+  el_t* el;
+  char* s;
 }
 
-%token EQ
-%token<raw> HEADER STRING
-%type<raw> key value header
-%type<prop> property properties
-%type<obj> stanza stanzas
+%token ENDF 0
+%token VERSION ATTDEF ENDDEF EQ SLASH CLOSE END
+%token <s> DOCTYPE ENCODING NAME VALUE DATA COMMENT START
+%type <s> name_opt
 
 %%
 
 document
-  : stanzas {
-    *objects = $stanzas;
-  }
-  ;
+ : prolog element misc_seq_opt ENDF
+ ;
 
-stanzas
-  : stanza {
-    $$ = $stanza;
-  }
-  | stanzas[last] stanza[next] {
-    $next->next = $last;
-    $$ = $next;
-  }
-  ;
+prolog
+ : version_opt encoding_opt doctype_opt
+   misc_seq_opt
+ ;
 
-stanza
-  : header properties {
-    $$ = Objects.new($header, $properties);
-  }
-  ;
+version_opt
+ : VERSION      { debug_info("<?XML-VERSION 1.0?>"); }
+ | /*empty*/
+ ;
 
-header
-  : HEADER {
-    $$ = $HEADER;
-  }
-  ;
+encoding_opt
+ : ENCODING     { debug_info("<?XML-ENCODING %s?>", $1); }
+ | /*empty*/
+ ;
 
-properties
-  : property {
-    $$ = $property;
-  }
-  | properties[last] property[next] {
-    $next->next = $last;
-    $$ = $next;
-  }
-  ;
+doctype_opt
+ : DOCTYPE      { debug_info("%s", $1); }
+ | /*empty*/
+ ;
 
-property
-  : key EQ value {
-    $$ = Objects.property.new($key, $value);
-  }
-  ;
 
-key : STRING { $$ = strdup($STRING); };
-value : STRING { $$ = strdup($STRING); };
+misc_seq_opt
+ : misc_seq_opt misc
+ | /*empty*/
+ ;
+
+misc
+ : COMMENT                    { debug_info("%s", $1); }
+ | attribute_decl
+ ;
+
+attribute_decl
+ : ATTDEF NAME                { debug_info("<?XML-ATT %s", $2); }
+   attribute_seq_opt ENDDEF {printf("?>");}
+ ;  
+
+element
+ : START                      { debug_info("<%s", $1); }
+   attribute_seq_opt
+   empty_or_content
+ ;
+
+empty_or_content
+ : SLASH CLOSE                { debug_info("/>"); }
+ | CLOSE                      { debug_info(">"); }
+   content END name_opt CLOSE { debug_info("</%s>", $5); }
+ ;
+
+content
+ : content DATA     { debug_info("%s", $2); }
+ | content misc
+ | content element
+ | /*empty*/
+ ;
+name_opt
+ : NAME           { $$ = $1; }
+ | /*empty*/      { $$ = strdup(""); }
+ ;
+attribute_seq_opt
+ : attribute_seq_opt attribute
+ | /*empty*/
+ ;
+attribute
+ : NAME             { debug_info(" %s", $1); }
+ | NAME EQ VALUE    { debug_info(" %s=%s", $1, $3); }
+ ;
 
 %%
 
-int yyerror(Object** objects, yyscan_t scanner, const char *msg) {
+int yyerror(doc_t* doc, yyscan_t scanner, const char *msg) {
   debug_danger("%s", msg);
 }

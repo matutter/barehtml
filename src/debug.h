@@ -9,12 +9,16 @@
   #define KMAG  "\x1B[35m"
   #define KCYN  "\x1B[36m"
   #define KWHT  "\x1B[37m"
+  #define KBOLD "\033[1m"
+  #define KDIM  "\e[2m"
+
+  #define KSEP  KRST KDIM " - " KRST
 
   #if defined(DEBUG_ON)
 
     #include <stdio.h>
     #define debug(fmt, args...) \
-      printf("[%s:%d] " fmt KRST "\n", __function__, __line__, ##args);
+      printf(KBOLD "%s:%d" KSEP fmt KRST "\n", __func__, __LINE__, ##args);
 
   #else
 
@@ -33,5 +37,8 @@
 
   #define debug_warning(fmt, args...) \
     debug( KYEL fmt, ##args)
+
+  #define debug_success(fmt, args...) \
+    debug( KGRN fmt, ##args)
 
 #endif

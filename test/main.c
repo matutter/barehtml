@@ -14,12 +14,12 @@ char* read_file(char* path) {
     fseek(fp, 0, SEEK_END);
     size = ftell(fp);
     rewind(fp);
-    buffer = malloc(length);
+    buffer = malloc(size);
     
     if(buffer) {
-      bytes_read = fread(buffer, 1, length, fp);
+      bytes_read = fread(buffer, 1, size, fp);
       if(size == bytes_read) {
-        debug_where("finsihed reading %lub from %s", size, path);
+        debug_where("finished reading %lu from %s", size, path);
       } else {
         debug_warning("failed to read %s", path);
       }
