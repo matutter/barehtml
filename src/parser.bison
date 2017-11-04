@@ -50,8 +50,9 @@ elements
 
 element
   : TAG_SP_OPEN tag_name attributes TAG_CLOSE
-  | TAG_SP_OPEN attributes TAG_SP_CLOSE
+  | TAG_SP_OPEN attributes TAG_SP_CLOSE 
   | TAG_OPEN attributes TAG_CLOSE content
+  | TAG_OPEN attributes TAG_SP_CLOSE content
   | TAG_END_OPEN NAME TAG_CLOSE
   | COMMENT
   ;
@@ -75,6 +76,7 @@ attribute
 content
   : content DATA
   | content element
+  | COMMENT
   | /* empty */
   ;
 
