@@ -18,7 +18,10 @@
 
     #include <stdio.h>
     #define debug(fmt, args...) \
-      printf(KBOLD "%s:%d" KSEP fmt KRST "\n", __func__, __LINE__, ##args);
+      dbg(KBOLD "%s:%d" KSEP fmt KRST "\n", __func__, __LINE__, ##args);
+
+    #define dbg(fmt, args...) \
+      printf(fmt KRST, ##args);
 
   #else
 
@@ -40,5 +43,25 @@
 
   #define debug_success(fmt, args...) \
     debug( KGRN fmt, ##args)
+
+  /// short
+
+  #define dbg_where(fmt, args...) \
+    dbg( KMAG fmt, ##args)
+
+  #define dbg_info(fmt, args...) \
+    dbg( KCYN fmt, ##args)
+
+  #define dbg_danger(fmt, args...) \
+    dbg( KRED fmt, ##args)
+
+  #define dbg_warning(fmt, args...) \
+    dbg( KYEL fmt, ##args)
+
+  #define dbg_success(fmt, args...) \
+    dbg( KGRN fmt, ##args)
+
+  #define dbg_token() \
+    dbg("%s", yytext)
 
 #endif

@@ -6,7 +6,18 @@
   #include "tinyxml.types.h"
   #include "tinyxml.tab.h"
 
-  static int keep;
+  static int in_tag;
+
+  #if 0
+    #define DBG_MODE() \
+      dbg(KDIM KRED "(%d)" KRST, yyg->yy_start)
+  #else
+    #define DBG_MODE()
+  #endif
+
+  #ifndef dbg_tag
+    #define dbg_tag() dbg(KDIM KBLU "%s" KRST, yytext)
+  #endif
 
   static char* word(char *s) {
     char *buf;
@@ -19,50 +30,116 @@
     return buf;
   }
 
+  //dbg("\n"); debug_info("Entered %s mode", name);
+  #define MODE_SET(MODE, name) \
+    BEGIN(MODE); 
+
+
 %}
 
 %option warn nodefault
 %option reentrant noyywrap never-interactive nounistd bison-bridge
 
+
 nl        (\r\n|\r|\n)
 ws        [ \t\r\n]+
-open      {nl}?"<"
-close     ">"{nl}?
-namestart [A-Za-z\200-\377_]
-namechar  [A-Za-z\200-\377_0-9.-]
+
+tag_open      "<"
+tag_close     ">"
+tag_end_open  "</"
+tag_sp_open   "<"[!?]
+tag_sp_close  "/>"
+
 esc       "&#"[0-9]+";"|"&#x"[0-9a-fA-F]+";"
-name      {namestart}{namechar}*
-data      ([^<\n&]|\n[^<&]|\n{esc}|{esc})+
-comment   {open}"!--"([^-]|"-"[^-])*"--"{close}
-string    \"([^"&]|{esc})*\"|\'([^'&]|{esc})*\'
-doctype   {open}"!DOCTYPE"{ws}{name}{ws}?{close}
-version   {open}"?XML-VERSION 1.0?"{close}
-encoding  {open}"?XML-ENCODING"{ws}{name}{ws}?"?"{close}
-attdef    {open}"?XML-ATT"
+name      [a-zA-Z_][a-zA-Z0-9_\-]*
+data      ([^<\n&]|&|\n[^<&]|\n{esc}|{esc}|"<=")+
+comment   "<!--"([^-]|"-"[^-])*"-->"
+string    \"([^"])*\"
+e_value     [a-zA-Z0-9_\-%:]+
 
 %s CONTENT
 
 %%
 
-<INITIAL>{ws}       {/* skip */}
-<INITIAL>{version}  { return VERSION; }
-<INITIAL>{doctype}  { yylval->s = strdup(yytext); return DOCTYPE; }
-<INITIAL>{encoding} { yylval->s = word(yytext + 14); return ENCODING; }
-<INITIAL>"/"        { return SLASH; }
-<INITIAL>"="        { return EQ; }
-<INITIAL>{close}    { BEGIN(CONTENT); return CLOSE; }
-<INITIAL>{name}     { yylval->s = strdup(yytext); return NAME; }
-<INITIAL>{string}   { yylval->s = strdup(yytext); return VALUE; }
-<INITIAL>"?"{close} { BEGIN(keep); return ENDDEF; }
+<INITIAL>{ws} {
+  dbg_token();
+}
 
-{attdef}            {keep = YY_START; BEGIN(INITIAL); return ATTDEF;}
-{open}{ws}?{name}   {BEGIN(INITIAL); yylval->s = word(yytext); return START;}
-{open}{ws}?"/"      {BEGIN(INITIAL); return END;}
-{comment}           {yylval->s = strdup(yytext); return COMMENT;}
+<INITIAL>"=" {
+  dbg_token();
+  return EQ;
+}
 
-<CONTENT>{data}     {yylval->s = strdup(yytext); return DATA;}
+{tag_open} {
+  DBG_MODE();
+  dbg_tag();
+  MODE_SET(INITIAL, "INITIAL");
+  DBG_MODE(); 
+  return TAG_OPEN;
+}
 
+{tag_end_open}  {
+  DBG_MODE(); 
+  dbg_tag();
+  MODE_SET(INITIAL, "INITIAL");
+  DBG_MODE(); 
+  return TAG_END_OPEN;
+}
+
+<INITIAL>{tag_close} {
+  DBG_MODE(); 
+  dbg_tag();
+  MODE_SET(CONTENT, "CONTENT");
+  DBG_MODE(); 
+  return TAG_CLOSE;
+}
+
+<INITIAL>{tag_sp_open} {
+  DBG_MODE(); 
+  dbg_tag();
+  DBG_MODE(); 
+  return TAG_SP_OPEN;
+}
+
+<INITIAL>{tag_sp_close} {
+  DBG_MODE(); 
+  dbg_tag();
+  MODE_SET(CONTENT, "CONTENT");
+  DBG_MODE(); 
+  return TAG_SP_CLOSE;
+}
+
+<INITIAL>{name} {
+  dbg(KCYN "%s" KRST, yytext);
+  yylval->s = strdup(yytext);
+  return NAME;
+}
+
+<INITIAL>{string} {
+  dbg(KGRN "%s" KRST, yytext);
+  yylval->s = strdup(yytext); 
+  return VALUE; 
+}
+
+<INITIAL>{e_value} {
+  dbg(KMAG "%s" KRST, yytext);
+  yylval->s = strdup(yytext); 
+  return EVALUE;
+}
+
+<CONTENT>{data} {
+  dbg(KYEL "%s" KRST, yytext);
+  yylval->s = strdup(yytext); 
+  return DATA;
+}
+
+{comment} {
+  dbg(KDIM "%s" KRST, yytext);
+  yylval->s = strdup(yytext); 
+  return COMMENT;
+}
+
+{nl}                { dbg_token(); }
 .                   { debug_danger("Unexpected character %c", *yytext); }
-{nl}                {/* skip, must be an extra one at EOF */;}
 
 %%

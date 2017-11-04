@@ -29,83 +29,54 @@
   char* s;
 }
 
-%token ENDF 0
-%token VERSION ATTDEF ENDDEF EQ SLASH CLOSE END
-%token <s> DOCTYPE ENCODING NAME VALUE DATA COMMENT START
-%type <s> name_opt
+%token EQ
+%token TAG_OPEN TAG_END_OPEN TAG_CLOSE TAG_SP_OPEN TAG_SP_CLOSE
+%token <s> NAME VALUE DATA EVALUE COMMENT
 
 %%
 
 document
- : prolog element misc_seq_opt ENDF
- ;
+  : elements end
+  ;
 
-prolog
- : version_opt encoding_opt doctype_opt
-   misc_seq_opt
- ;
+end
+  : { return 0; }
+  ; 
 
-version_opt
- : VERSION      { debug_info("<?XML-VERSION 1.0?>"); }
- | /*empty*/
- ;
-
-encoding_opt
- : ENCODING     { debug_info("<?XML-ENCODING %s?>", $1); }
- | /*empty*/
- ;
-
-doctype_opt
- : DOCTYPE      { debug_info("%s", $1); }
- | /*empty*/
- ;
-
-
-misc_seq_opt
- : misc_seq_opt misc
- | /*empty*/
- ;
-
-misc
- : COMMENT                    { debug_info("%s", $1); }
- | attribute_decl
- ;
-
-attribute_decl
- : ATTDEF NAME                { debug_info("<?XML-ATT %s", $2); }
-   attribute_seq_opt ENDDEF {printf("?>");}
- ;  
+elements
+  : element
+  | elements element
+  ;
 
 element
- : START                      { debug_info("<%s", $1); }
-   attribute_seq_opt
-   empty_or_content
- ;
+  : TAG_SP_OPEN tag_name attributes TAG_CLOSE
+  | TAG_SP_OPEN attributes TAG_SP_CLOSE
+  | TAG_OPEN attributes TAG_CLOSE content
+  | TAG_END_OPEN NAME TAG_CLOSE
+  | COMMENT
+  ;
 
-empty_or_content
- : SLASH CLOSE                { debug_info("/>"); }
- | CLOSE                      { debug_info(">"); }
-   content END name_opt CLOSE { debug_info("</%s>", $5); }
- ;
+tag_name
+  : NAME
+  ;
+
+attributes
+  : attribute
+  | attributes attribute
+  ;
+
+attribute
+  : NAME
+  | NAME EQ NAME
+  | NAME EQ VALUE
+  | NAME EQ EVALUE
+  ;
 
 content
- : content DATA     { debug_info("%s", $2); }
- | content misc
- | content element
- | /*empty*/
- ;
-name_opt
- : NAME           { $$ = $1; }
- | /*empty*/      { $$ = strdup(""); }
- ;
-attribute_seq_opt
- : attribute_seq_opt attribute
- | /*empty*/
- ;
-attribute
- : NAME             { debug_info(" %s", $1); }
- | NAME EQ VALUE    { debug_info(" %s=%s", $1, $3); }
- ;
+  : content DATA
+  | content element
+  | /* empty */
+  ;
 
 %%
 

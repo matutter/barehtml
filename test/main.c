@@ -38,25 +38,33 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  char* path = argv[1];
-  doc_t doc;
-  yyscan_t scanner;
-  YY_BUFFER_STATE state;
+  int status = 0;
+  for(int i = 1; i < argc; i++) {
+    char* path = argv[i];
+    doc_t doc;
+    yyscan_t scanner;
+    YY_BUFFER_STATE state;
 
-  int status = yylex_init(&scanner);
-  if(OK(status)) {
-    char* xml = read_file(path);
-    if(xml) {
-      state = yy_scan_string(xml, scanner);
-      
-      status = yyparse(&doc, scanner);
-      if(OK(status)) {
-        debug_success("parse complete");
+    status = yylex_init(&scanner);
+    if(OK(status)) {
+      char* xml = read_file(path);
+      if(xml) {
+        state = yy_scan_string(xml, scanner);
+        
+        status = yyparse(&doc, scanner);
+        if(OK(status)) {
+          debug_success("parse complete");
+        }
+        yy_delete_buffer(state, scanner);
       }
-      yy_delete_buffer(state, scanner);
+      yylex_destroy(scanner);
     }
-    yylex_destroy(scanner);
+
+    if(!OK(status)) {
+      break;
+    }
   }
 
-  return 0;
+
+  return status;
 }
