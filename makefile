@@ -3,7 +3,7 @@
 
 CC    = gcc
 CINCL = -Isrc
-CCFLAGS = -DDEBUG_ON -DYYDEBUG  -Wfatal-errors
+CCFLAGS = -DDEBUG_ON -DYYDEBUG -DYYINITDEPTH=10000 -DYYMAXDEPTH=20000 -Wfatal-errors
 
 #tinyxml.o: src/tinyxml.c src/tinyxml.yy.c src/tinyxml.tab.c
 #| ${CC} -c ${CCFLAGS} -fPIC ${CINCL} -o $@ $^
