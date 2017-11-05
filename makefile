@@ -3,25 +3,25 @@
 
 CC    = gcc
 CINCL = -Isrc
-CCFLAGS = -DDEBUG_ON -DYYDEBUG -DYYINITDEPTH=10000 -DYYMAXDEPTH=20000 -Wfatal-errors
+CCFLAGS = -DDEBUG_ON -Wfatal-errors -g -ggdb
 
 #tinyxml.o: src/tinyxml.c src/tinyxml.yy.c src/tinyxml.tab.c
 #| ${CC} -c ${CCFLAGS} -fPIC ${CINCL} -o $@ $^
 
-src/tinyxml.yy.c: src/lexer.flex
-| flex --header-file=src/tinyxml.yy.h -o $@ -d $^
+src/tokenizer.o: src/tokenizer.c
+| ${CC} -c ${CCFLAGS} -fPIC ${CINCL} -o $@ $^
 
-src/tinyxml.tab.c: src/parser.bison
-| bison --defines -o $@ $^
-
-main.test: test/main.c src/tinyxml.c src/tinyxml.yy.c src/tinyxml.tab.c
+main.test: test/main.c src/tinyxml.c src/tokenizer.o
 | ${CC} ${CCFLAGS} ${CINCL} -o $@ $^
 
 test: main.test
-| ./main.test test/google.html test/sample1.html test/sample2.html test/so.html
+| ./main.test test/sample1.html 
+
+grind-test: main.test
+| valgrind ./main.test test/sample1.html 
 
 clean:
-| rm -f main.test src/tinyxml.yy.h src/tinyxml.yy.c src/tinyxml.tab.c src/tinyxml.tab.h
+| rm -f main.test src/tokenizer.o 
 
 
 

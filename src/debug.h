@@ -21,7 +21,9 @@
       dbg(KBOLD "%s:%d" KSEP fmt KRST "\n", __func__, __LINE__, ##args);
 
     #define dbg(fmt, args...) \
-      printf(fmt KRST, ##args);
+      printf(fmt KRST, ##args)
+
+      //; fflush(NULL)
 
   #else
 
