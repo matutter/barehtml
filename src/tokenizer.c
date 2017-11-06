@@ -35,6 +35,33 @@ int hard_scan_space(scanner*);
 int soft_scan_space(scanner*);
 int emit_token(scanner*, int);
 
+static inline bool is_in_set(char c, char const* set) {
+  while(*set) {
+    if(*set == c) return true;
+    set++;
+  }
+  return false;
+}
+
+static inline bool is_name_char(char c) {
+  return (isalnum(c) || c == '_' || c == '-');
+}
+
+static inline bool is_quote_char(char c) {
+  return (c == '\'' || c == '"');
+}
+
+static inline bool is_tag_end_char(char c) {
+  return (c == '/' || c == '?' || c == '>');
+}
+
+static inline bool is_attr_value_char(char c) {
+  // some special characters are allowed for evaluation as CSS properties
+  // for example `width=100%` is valid
+  const char allowed[] = "%!_-+();";
+  return (isalnum(c) || is_in_set(c, allowed));
+}
+
 /**
 * Called after a token is emitted.
 */
@@ -151,8 +178,6 @@ int scan_tag_end(scanner* s) {
 
 int scan_tag_start(scanner* s) {
   int status = -1;
-
-
   char* pos = get_scan_ptr(s, 0);
   while(s->pos < s->end) {
 
@@ -188,8 +213,14 @@ bool can_look_back(scanner* s, size_t offset) {
 /**
 * Sets the `in_quote` flag based on the current character being evaluated.
 */
-void scan_escaped_text(scanner* s) {
-  char c = get_scan_char(s, 0);
+void scan_escaped_text(scanner* s, char* ptr) {
+  char c;
+  if(ptr) {
+    c = *ptr;
+  } else {
+    c = get_scan_char(s, 0);
+  }
+
   if(s->in_quote && s->quote_char != '\0') {
 
     // last char is escape seq && we're not on the first character
@@ -201,7 +232,7 @@ void scan_escaped_text(scanner* s) {
       s->quote_char = '\0';
     }
 
-  } else if(c == '\'' || c == '"') {
+  } else if(is_quote_char(c)) {
     s->in_quote = true;
     s->quote_char = c;
   }
@@ -213,28 +244,39 @@ void scan_escaped_text(scanner* s) {
 int scan_content(scanner* s) {
   int status = -1;
 
-  char quote_char = '\0';
+  #if 0
+    debug_where("enter");
+  #endif
+
   while(s->pos < s->end) {
-    switch(*s->pos) {
-      case '"':
-      case '\'':
-        scan_escaped_text(s);
-        break;
-      case '<':
+    char c = *s->pos;
 
-        if(!s->in_quote) {
+    #if 0
+      debug_where("in content loop");
+    #endif
 
-          status = emit_token(s, CONTENT);
-          return status;
-
-        }
-
-        break;
-      default:
-        break;
+    if(is_quote_char(c)) {
+      scan_escaped_text(s, NULL);
+      s->pos++;
+      continue;
     }
+
+    if(!s->in_quote) {
+      if(c == '<') {
+        #if 0
+          debug_where("exit");
+        #endif
+        status = emit_token(s, CONTENT);
+        return status;
+      }
+    }
+
     s->pos++;
   }
+
+  #if 0
+    debug_where("exit");
+  #endif
 
   return status;
 }
@@ -274,15 +316,17 @@ int scan_attr_name(scanner* s) {
   int status = soft_scan_space(s);
   if(OK(status)) {
 
-    while(s->pos < s->end) {
-      char c = get_scan_char(s, 0);
-      if(isspace(c)) break;
-      if(c == '=') break;
-      s->pos++;
+    char* pos = get_scan_ptr(s, 0);
+    while(pos < s->end && is_name_char(*pos)) {
+      pos++;
     }
-
-    status = emit_token(s, ATTR_NAME);
-
+    if(pos > get_scan_ptr(s, 0)) {
+      s->pos = pos;
+      status = emit_token(s, ATTR_NAME);
+    } else {
+      debug_warning("expected name chars, found nothing");
+      status = -1;
+    }
   }
 
   #if 0
@@ -295,23 +339,49 @@ int scan_attr_value(scanner* s) {
   int status = -1;
 
   soft_scan_space(s);
+  bool value_ever = false;
   while(s->pos < s->end) {
-    switch(get_scan_char(s, 0)) {
-      case '\'':
-      case '"':
-        scan_escaped_text(s);
-        break;
-      case ' ':
-      case '>':
-        if(!s->in_quote) {
-          return status = emit_token(s, ATTR_VALUE);
-        }
-        break;
-      default:
-        break;
+    char c = *s->pos;
+
+    #if 0
+      debug_where("in attr_value loop");
+    #endif
+
+    if(value_ever == false && isspace(c)) {
+      s->pos++;
+      continue;
     }
 
-    s->pos++;
+    if(is_quote_char(c)) {
+      scan_escaped_text(s, s->pos);
+      s->pos++;
+      continue;
+    }
+
+    // accept all in quote
+    if(s->in_quote) {
+      s->pos++;
+      value_ever = true;
+      continue;
+    }
+
+    while(s->pos < s->end && is_attr_value_char(c)) {
+
+      #if 0
+        debug_where("in attr_value loop (2)");
+      #endif
+
+      s->pos++;
+      c = *s->pos;
+      value_ever = true;
+    }
+
+    if(value_ever) {
+      return status = emit_token(s, ATTR_VALUE);
+    } else {
+      // empty value is OK
+      return 0;
+    }
   }
 
   return status;
@@ -319,51 +389,74 @@ int scan_attr_value(scanner* s) {
 
 int scan_attribute(scanner* s) {
 
+  #if 0
+    debug_where("enter");
+  #endif
+
   int status = scan_attr_name(s);
   if(OK(status)) {
+    // we have a name, now scan for assignment to value
     soft_scan_space(s);
-    if(get_scan_char(s, 0) == '=') {
-      s->pos += 1;
-      status = emit_token(s, ATTR_EQ);
-      if(OK(status)) {
-        status = scan_attr_value(s);
+    while(s->pos < s->end) {
+
+      #if 0
+        debug_where("in attribute loop");
+      #endif
+
+      if(isspace(*s->pos)) {
+        s->pos++;
+        continue;
+      }
+
+      if(*s->pos == '=') {
+        s->pos++;
+        status = emit_token(s, ATTR_EQ);
+        if(OK(status)) {
+          status = scan_attr_value(s);
+        }
+        break;
+      } else {
+        status = 0;
+        break;
       }
     }
   }
+
+  #if 0
+    debug_where("exit");
+  #endif
 
   return status;
 }
 
 int scan_attributes(scanner * s) {
-  int status = -1;
-  regmatch_t match;
-  regex_t re;
+  int status = 0;
 
-  status = scan_attr_name(s);
-  if(OK(status)) {
-    while(OK(status) && s->pos < s->end) {
-      char* pos = s->pos;
+  while(OK(status) && s->pos < s->end) {
+    char* pos = s->pos;
 
-      // should move `s->pos` forward, this is a mutable state
-      status = scan_attribute(s);
-      if(OK(status)) {
-        // look for signs of end, or continue
-        soft_scan_space(s);
-        switch(get_scan_char(s, 0)) {
-          case ' ':
-          case '/':
-          case '>':
-            return 0;
-          default:
-            break;
-        }
-      } else {
-        break;
+    #if 0
+      debug_where("in attributes loop");
+    #endif
+
+    // should move `s->pos` forward, this is a mutable state
+    status = scan_attribute(s);
+    if(OK(status)) {
+      // look for signs of end, or continue
+      soft_scan_space(s);
+      switch(get_scan_char(s, 0)) {
+        case '/':
+        case '>':
+          return 0;
+        default:
+          break;
       }
+    } else {
+      break;
+    }
 
-      if(pos == s->pos) {
-        break;
-      }
+    if(pos == s->pos) {
+      break;
     }
   }
 
@@ -379,6 +472,10 @@ int scan_document(scanner* s) {
   while(OK(status) && (s->pos < s->end)) {
     char* pos = s->pos;
 
+    #if 0
+      debug_where("in document loop");
+    #endif
+
     if('<' == *s->pos) {
 
       status = scan_tag_start(s);
@@ -390,7 +487,6 @@ int scan_document(scanner* s) {
           status = scan_tag_end(s);
           if(OK(status)) {
 
-            s->bail_out=true;
           }
         }
       }
