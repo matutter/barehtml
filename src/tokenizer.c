@@ -176,12 +176,41 @@ int scan_tag_end(scanner* s) {
   return status;
 }
 
+int scan_comment(scanner* s) {
+  int status = -1;
+
+  // we may enter this scanner after a `<` has been consumed
+  if(s->pos != s->lpos) {
+    s->pos = s->lpos;
+  }
+
+  const char start_chars[] = "<!--";
+  const char end_chars[] = "-->";
+
+  char* comment_start = strstr(s->pos, start_chars);
+  char* comment_end = strstr(s->pos, end_chars);
+
+  if(comment_start && comment_end && comment_start == s->pos) {
+    if(comment_start < comment_end) {
+      s->pos = (comment_end + strlen(end_chars));
+      s->pad = 0;
+      status = emit_token(s, COMMENT);
+    }
+  } else {
+    debug_warning("scanner not at beginning of comment");
+  }
+
+  return status;
+}
+
 int scan_tag_start(scanner* s) {
   int status = -1;
   char* pos = get_scan_ptr(s, 0);
   while(s->pos < s->end) {
 
     switch(*s->pos) {
+      case '-':
+        return -1;
       case '<':
       case '!':
       case '?':
@@ -489,6 +518,8 @@ int scan_document(scanner* s) {
 
           }
         }
+      } else {
+        status = scan_comment(s);
       }
     } else {
       status = scan_content(s);

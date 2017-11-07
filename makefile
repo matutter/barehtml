@@ -1,5 +1,5 @@
 .RECIPEPREFIX = |
-.PHONY: test
+.PHONY: grind-test test test-2
 
 CC    = gcc
 CINCL = -Isrc
@@ -16,6 +16,9 @@ main.test: test/main.c src/tinyxml.c src/tokenizer.o
 
 test: main.test
 | ./main.test test/sample1.html 
+
+test-2: main.test
+| ./main.test test/sample2.html 
 
 grind-test: main.test
 | valgrind ./main.test test/sample1.html 
