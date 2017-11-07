@@ -494,6 +494,10 @@ int scan_document(scanner* s) {
       status = scan_content(s);
     }
 
+    if(s->pos == s->end) {
+      return emit_token(s, HTML_END);
+    }
+
     if(s->bail_out) {
       return -1;
     }

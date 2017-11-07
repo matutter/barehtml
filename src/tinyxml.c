@@ -32,9 +32,12 @@ int token_fn(token_t* tok) {
     case COMMENT:
       dbg(KDIM KWHT "%s" KRST, tok->str);
       break;
+    case HTML_END:
+      dbg(KRST "\n");
+      break;
     default:
       debug_danger("unknown token id %d", tok->id);
-
+      break;
   }
 
   return status;

@@ -15,7 +15,8 @@ enum HTML_TOKEN_ID {
   CONTENT        = 6,
   CONTENT_STYLE  = 7,
   CONTENT_SCRIPT = 8,
-  COMMENT        = 9
+  COMMENT        = 9,
+  HTML_END       = 0
 };
 
 #define TOKEN_ID_STR(x) \
