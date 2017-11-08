@@ -8,8 +8,12 @@ int token_fn(token_t* tok) {
 
   switch(tok->id) {
     case TAG_START:
+    case TAG_START_CLOSE:
     case TAG_END:
       dbg(KDIM KBLU "%s%s" KRST, tok->pad, tok->str);
+      break;
+    case TAG_NAME:
+      dbg(KBOLD KCYN "%s%s" KRST, tok->pad, tok->str);
       break;
     case ATTR_EQ:
       dbg(KBOLD KWHT "%s%s" KRST, tok->pad, tok->str);

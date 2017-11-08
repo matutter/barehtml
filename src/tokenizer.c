@@ -7,6 +7,7 @@
 #include <regex.h>
 
 #include "debug.h"
+#include "tag_id.h"
 #include "tokenizer.h"
 
 #ifndef OK
@@ -25,11 +26,14 @@ struct scanner {
   bool in_quote;
   char quote_char;
   bool bail_out;
+  enum HTML_TOKEN_ID last_id;
+  enum HTML_TAG_ID last_tag;
+  bool strict_content;
 };
 
 
 char* get_scan_ptr(scanner*, size_t);
-void finalize_scanner(scanner*);
+void finalize_scanner(scanner*, token_t*);
 char get_scan_char(scanner*, size_t);
 int hard_scan_space(scanner*);
 int soft_scan_space(scanner*);
@@ -58,18 +62,29 @@ static inline bool is_tag_end_char(char c) {
 static inline bool is_attr_value_char(char c) {
   // some special characters are allowed for evaluation as CSS properties
   // for example `width=100%` is valid
-  const char allowed[] = "%!_-+();";
+  const char allowed[] = "%!_-+():;";
   return (isalnum(c) || is_in_set(c, allowed));
 }
 
 /**
 * Called after a token is emitted.
 */
-void finalize_scanner(scanner* s) {
-  s->lpos = s->pos;
-  s->in_quote = false;
-  s->quote_char = '\0';
+void finalize_scanner(scanner* s, token_t* tok) {
+
+  if(tok->id == TAG_NAME) {
+    if(s->last_id == TAG_START_CLOSE) {
+      s->last_tag = -1;
+    } else {
+      s->last_tag =  html_lookup_tag_id(tok->str);
+    }
+  }
+
+  s->last_id = tok->id;
+
   s->pad = 0;
+  s->lpos = s->pos;
+  s->quote_char = '\0';
+  s->in_quote = false;
 }
 
 char* get_scan_ptr(scanner* s, size_t offset) {
@@ -104,8 +119,14 @@ int emit_token(scanner* s, int token_id) {
       );
   #endif
 
-  if(str_len <= 0 || pad_len < 0 || span_size <= 0) {
-    debug_danger("invalid token calculation");
+  if(str_len < 0 || pad_len < 0 || span_size < 0) {
+    debug_danger(
+      "invalid token calculation"
+      " (%d.%d.%d)"
+      , str_len
+      , pad_len
+      , span_size
+    );
     s->bail_out = true;
     return -1;
   }
@@ -134,14 +155,13 @@ int emit_token(scanner* s, int token_id) {
     tok->pad_len = pad_len;
 
     s->cb(tok);
-
+    finalize_scanner(s, tok);
     free(tok);
 
   } else {
     debug_danger("scanner out of memory");
   }
 
-  finalize_scanner(s);
   return 0;
 } 
 
@@ -220,7 +240,12 @@ int scan_tag_start(scanner* s) {
       default:
         if(pos < s->pos) {
 
-          status = emit_token(s, TAG_START);
+          int id = TAG_START;
+          if(s->lpos == strstr(s->lpos, "</")) {
+            id = TAG_START_CLOSE;
+          }
+
+          status = emit_token(s, id);
           return status;
 
         }
@@ -273,16 +298,15 @@ void scan_escaped_text(scanner* s, char* ptr) {
 int scan_content(scanner* s) {
   int status = -1;
 
-  #if 0
-    debug_where("enter");
-  #endif
+  int id = CONTENT;
+  if(s->last_tag == TAG_SCRIPT) {
+    id = CONTENT_SCRIPT;
+  } else if(s->last_tag == TAG_STYLE) {
+    id = CONTENT_STYLE;
+  }
 
   while(s->pos < s->end) {
     char c = *s->pos;
-
-    #if 0
-      debug_where("in content loop");
-    #endif
 
     if(is_quote_char(c)) {
       scan_escaped_text(s, NULL);
@@ -292,20 +316,27 @@ int scan_content(scanner* s) {
 
     if(!s->in_quote) {
       if(c == '<') {
-        #if 0
-          debug_where("exit");
-        #endif
-        status = emit_token(s, CONTENT);
-        return status;
+
+        // script must end with script tag
+        if(id != CONTENT) {
+          char* pos = strstr(s->pos, "</");
+          if(s->pos == pos) {
+            status = emit_token(s, id);
+            return status;
+          }
+        } else {
+          status = emit_token(s, id);
+          return status;
+        }
       }
     }
 
     s->pos++;
   }
 
-  #if 0
-    debug_where("exit");
-  #endif
+  if(s->pos > s->lpos) {
+    status = emit_token(s, id);
+  }
 
   return status;
 }
@@ -342,6 +373,11 @@ int scan_attr_name(scanner* s) {
     debug_where("enter");
   #endif
 
+  int id = ATTR_NAME;
+  if(s->last_id == TAG_START || s->last_id == TAG_START_CLOSE) {
+    id = TAG_NAME;
+  }
+
   int status = soft_scan_space(s);
   if(OK(status)) {
 
@@ -351,7 +387,7 @@ int scan_attr_name(scanner* s) {
     }
     if(pos > get_scan_ptr(s, 0)) {
       s->pos = pos;
-      status = emit_token(s, ATTR_NAME);
+      status = emit_token(s, id);
     } else {
       debug_warning("expected name chars, found nothing");
       status = -1;
@@ -383,6 +419,7 @@ int scan_attr_value(scanner* s) {
 
     if(is_quote_char(c)) {
       scan_escaped_text(s, s->pos);
+      value_ever = true;
       s->pos++;
       continue;
     }
@@ -408,6 +445,7 @@ int scan_attr_value(scanner* s) {
     if(value_ever) {
       return status = emit_token(s, ATTR_VALUE);
     } else {
+      debug_where("value never");
       // empty value is OK
       return 0;
     }
@@ -552,7 +590,9 @@ int scan_html(char* html, int size, token_cb cb) {
     .lpos = html,
     .end  = (html + size),
     .in_quote = false,
-    .cb   = cb
+    .cb   = cb,
+    .last_id = -1,
+    .last_tag = -1
   };
 
   if(s.cb) {

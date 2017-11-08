@@ -7,20 +7,23 @@
 #endif
 
 enum HTML_TOKEN_ID {
-  TAG_START      = 1,
-  TAG_END        = 2,
-  ATTR_EQ        = 3,
-  ATTR_NAME      = 4,
-  ATTR_VALUE     = 5,
-  CONTENT        = 6,
-  CONTENT_STYLE  = 7,
-  CONTENT_SCRIPT = 8,
-  COMMENT        = 9,
-  HTML_END       = 0
+  TAG_START      = 10,
+  TAG_START_CLOSE= 11,
+  TAG_END        = 12,
+  TAG_NAME       = 13,
+  ATTR_EQ        = 20,
+  ATTR_NAME      = 21,
+  ATTR_VALUE     = 22,
+  CONTENT        = 30,
+  CONTENT_STYLE  = 31,
+  CONTENT_SCRIPT = 33,
+  COMMENT        = 40,
+  HTML_END       = 50
 };
 
 #define TOKEN_ID_STR(x) \
   (TAG_START == x) ? "TAG_START" \
+  :(TAG_START_CLOSE == x) ? "TAG_START_CLOSE" \
   :(TAG_END == x) ? "TAG_END" \
   :(ATTR_EQ == x) ? "ATTR_EQ" \
   :(ATTR_NAME == x) ? "ATTR_NAME" \
