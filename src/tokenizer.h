@@ -37,8 +37,10 @@ enum HTML_TOKEN_ID {
 typedef struct HTML_TOKEN token_t;
 struct HTML_TOKEN {
   enum HTML_TOKEN_ID id;
+  // pointer to location in input where token starts
   char* str;
   int str_len;
+  // pointer to location in input where padding before token starts
   char* pad;
   int pad_len;
   int gc;

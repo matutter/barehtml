@@ -18,7 +18,7 @@ int html_lookup_tag_id(char* input) {
 
   for(int i = 0; i < tag_table_size; i++) {
     tag_table_row* row = (tag_table_row*)&tag_table[i];
-    if(strcmp(row->tag, input) == 0) {
+    if(strncasecmp(row->tag, input, strlen(row->tag)) == 0) {
       return row->id;
     }
   }

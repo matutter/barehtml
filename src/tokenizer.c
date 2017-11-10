@@ -45,10 +45,8 @@ struct scanner {
   char quote_char;
   bool bail_out;
   enum HTML_TOKEN_ID last_id;
-  enum HTML_TAG_ID last_tag;
+  enum HTML_TAG_ID parent_tag_id;
   bool strict_content;
-  void* mem;
-  size_t mem_size;
 };
 
 
@@ -56,6 +54,7 @@ char* get_scan_ptr(scanner*, size_t);
 void finalize_scanner(scanner*, token_t*);
 char get_scan_char(scanner*, size_t);
 int emit_token(scanner*, int);
+int get_content_type(enum HTML_TAG_ID id);
 
 static inline bool is_in_set(char c, char const* set) {
   while(*set) {
@@ -91,14 +90,18 @@ void finalize_scanner(scanner* s, token_t* tok) {
 
   if(tok->id == TAG_NAME) {
     if(s->last_id == TAG_START_CLOSE) {
-      s->last_tag = -1;
+      s->parent_tag_id = -1;
     } else {
-      s->last_tag =  html_lookup_tag_id(tok->str);
+      s->parent_tag_id =  html_lookup_tag_id(tok->str);
+    }
+
+    if(s->parent_tag_id == TAG_SCRIPT || s->parent_tag_id == TAG_STYLE) {
+      s->strict_content = true;
     }
   }
 
-  s->last_id = tok->id;
 
+  s->last_id = tok->id;
   s->pad = 0;
   s->lpos = s->pos;
   s->quote_char = '\0';
@@ -115,85 +118,27 @@ char get_scan_char(scanner* s, size_t offset) {
 
 int emit_token(scanner* s, int token_id) {
 
-  token_t* tok = NULL;
-
-  int tok_size = sizeof(token_t);
-
   int span_size = (s->pos - s->lpos);
   int pad_len = s->pad;
   int str_len = span_size - s->pad;
   char* token_ptr = (s->lpos + pad_len);
-  size_t required_mem = (size_t)(tok_size + pad_len + str_len + 3);
 
-  #if 0
-    debug_info(
-      "tok: %d, "
-      "pad: %d, "
-      "str: %d, "
-      "id: %d %s"
-      , tok_size
-      , pad_len
-      , str_len
-      , token_id
-      , TOKEN_ID_STR(token_id)
-      );
-  #endif
-
-  if(str_len < 0 || pad_len < 0 || span_size < 0) {
-    debug_danger(
-      "invalid token calculation"
-      " (%d.%d.%d)"
-      , str_len
-      , pad_len
-      , span_size
-    );
+  if(pad_len < 0 || str_len < 0) {
+    debug_warning("Invalid token offset calculation.");
     s->bail_out = true;
     return -1;
   }
 
-  if(s->mem == NULL) {
-    s->mem = malloc(required_mem);
-    if(s->mem) {
-      s->mem_size = required_mem;
-    } else {
-      return -1;
-    }
-  }
+  token_t tok = { 0 };
+  tok.id = token_id;
+  tok.gc = 0;
+  tok.str = (s->lpos + pad_len);
+  tok.pad = s->lpos;
+  tok.str_len = str_len;
+  tok.pad_len = pad_len;
 
-  if(s->mem_size < required_mem) {
-    void* ptr = realloc(s->mem, required_mem);
-    if(ptr) {
-      s->mem = ptr;
-      s->mem_size = required_mem;
-    } else {
-      return -1;
-    }
-  }
-
-  if(s->mem) {
-    memset(s->mem, 0, required_mem);
-    tok = (token_t*)s->mem;
-    tok->pad = (char*)(s->mem + tok_size + 1);
-    tok->str = (char*)(s->mem + tok_size + 1 + pad_len + 1);
-    
-    if(pad_len) {
-      strncpy(tok->pad, s->lpos, pad_len);
-    } else {
-      tok->pad[0] = '\0';
-    }
-    strncpy(tok->str, token_ptr, str_len);
-
-    tok->id = token_id;
-    tok->gc = GC_HTML_INT;
-    tok->str_len = str_len;
-    tok->pad_len = pad_len;
-
-    s->cb(tok);
-    finalize_scanner(s, tok);
-
-  } else {
-    debug_danger("scanner out of memory");
-  }
+  s->cb(&tok);
+  finalize_scanner(s, &tok);
 
   return 0;
 } 
@@ -317,19 +262,21 @@ void scan_escaped_text(scanner* s, char* ptr) {
   }
 }
 
+int get_content_type(enum HTML_TAG_ID id) {
+  switch(id) {
+    case TAG_SCRIPT: return CONTENT_SCRIPT;
+    case TAG_STYLE:  return CONTENT_STYLE;
+    default:         return CONTENT;
+  }
+}
+
 /**
 * `CONTENT` is everything between, before, and after tags.
 */
 int scan_content(scanner* s) {
   int status = -1;
 
-  int id = CONTENT;
-  if(s->last_tag == TAG_SCRIPT) {
-    id = CONTENT_SCRIPT;
-  } else if(s->last_tag == TAG_STYLE) {
-    id = CONTENT_STYLE;
-  }
-
+  int id = get_content_type(s->parent_tag_id);
   while(s->pos < s->end) {
     char c = *s->pos;
 
@@ -343,10 +290,11 @@ int scan_content(scanner* s) {
       if(c == '<') {
 
         // script must end with script tag
-        if(id != CONTENT) {
+        if(s->strict_content) {
           char* pos = strstr(s->pos, "</");
           if(s->pos == pos) {
             status = emit_token(s, id);
+            s->strict_content = false;
             return status;
           }
         } else {
@@ -379,7 +327,7 @@ int scan_attr_name(scanner* s) {
   while(s->pos < s->end && is_name_char(*s->pos)) {
     s->pos++;
   }
-  if(s->lpos < s->pos) {
+  if(s->lpos < (s->pos)) {
     status = emit_token(s, id);
   } else {
     debug_warning("expected name chars, found nothing");
@@ -572,9 +520,8 @@ int scan_html(char* html, int size, token_cb cb) {
     .in_quote = false,
     .cb   = cb,
     .last_id = -1,
-    .last_tag = -1,
-    .mem = NULL,
-    .mem_size = 0
+    .parent_tag_id = TAG_NOT_A_TAG,
+    .strict_content = false
   };
 
   if(s.cb) {
@@ -588,12 +535,6 @@ int scan_html(char* html, int size, token_cb cb) {
     debug_warning("No callback provided");
     errno = EINVAL;
     status = -1;
-  }
-
-  if(s.mem) {
-    free(s.mem);
-    s.mem = NULL;
-    s.mem_size = 0;
   }
 
   return status;

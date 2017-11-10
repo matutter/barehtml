@@ -27,6 +27,9 @@ test-2: main.test
 | ./$< test/sample2.html 
 
 test-3: main.test
+| ./$< test/so.html
+
+test-4: main.test
 | ./$< test/*.html
 
 grind-test: main.test

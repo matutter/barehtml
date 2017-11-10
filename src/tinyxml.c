@@ -3,46 +3,39 @@
 #include "tinyxml.h"
 #include "debug.h"
 
+char * get_highlight(int id) {
+
+  switch(id) {
+    case TAG_START:
+    case TAG_START_CLOSE:
+    case TAG_END:        return KDIM KBLU;
+    case TAG_NAME:       return KBOLD KCYN;
+    case ATTR_EQ:        return KBOLD KWHT;
+    case ATTR_NAME:      return KCYN;
+    case ATTR_VALUE:     return KGRN;
+    case CONTENT:        return KDIM KYEL;
+    case CONTENT_STYLE:  return KDIM KMAG;
+    case CONTENT_SCRIPT: return KDIM KGRN;
+    case COMMENT:        return KDIM KWHT;
+    case HTML_END:       return KRST "\n";
+    default:
+      debug_danger("unknown token id %d", id);
+      break;
+  }
+
+  return "";
+}
+
 int token_fn(token_t* tok) {
   int status = 0;
 
-  switch(tok->id) {
-    case TAG_START:
-    case TAG_START_CLOSE:
-    case TAG_END:
-      dbg(KDIM KBLU "%s%s" KRST, tok->pad, tok->str);
-      break;
-    case TAG_NAME:
-      dbg(KBOLD KCYN "%s%s" KRST, tok->pad, tok->str);
-      break;
-    case ATTR_EQ:
-      dbg(KBOLD KWHT "%s%s" KRST, tok->pad, tok->str);
-      break;
-    case ATTR_NAME:
-      dbg(KCYN "%s%s" KRST, tok->pad, tok->str);
-      break;
-    case ATTR_VALUE:
-      dbg(KGRN "%s%s" KRST, tok->pad, tok->str);
-      break;
-    case CONTENT:
-      dbg(KDIM KYEL "%s" KRST, tok->str);
-      break;
-    case CONTENT_STYLE:
-      dbg(KDIM KMAG "%s" KRST, tok->str);
-      break;
-    case CONTENT_SCRIPT:
-      dbg(KDIM KGRN "%s" KRST, tok->str);
-      break;
-    case COMMENT:
-      dbg(KDIM KWHT "%s" KRST, tok->str);
-      break;
-    case HTML_END:
-      dbg(KRST "\n");
-      break;
-    default:
-      debug_danger("unknown token id %d", tok->id);
-      break;
-  }
+  char* highlight = get_highlight(tok->id);
+  printf(
+    "%s%.*s%.*s" KRST
+    , highlight
+    , tok->pad_len, tok->pad
+    , tok->str_len, tok->str
+  );
 
   return status;
 }
