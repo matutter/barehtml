@@ -22,16 +22,16 @@ enum HTML_TOKEN_ID {
 };
 
 #define TOKEN_ID_STR(x) \
-  (TAG_START == x) ? "TAG_START" \
+   (TAG_START == x)       ? "TAG_START" \
   :(TAG_START_CLOSE == x) ? "TAG_START_CLOSE" \
-  :(TAG_END == x) ? "TAG_END" \
-  :(ATTR_EQ == x) ? "ATTR_EQ" \
-  :(ATTR_NAME == x) ? "ATTR_NAME" \
-  :(ATTR_VALUE == x) ? "ATTR_VALUE" \
-  :(CONTENT == x) ? "CONTENT" \
-  :(CONTENT_STYLE == x) ? "CONTENT_STYLE" \
-  :(CONTENT_SCRIPT == x) ? "CONTENT_SCRIPT" \
-  :(COMMENT == x) ? "COMMENT" \
+  :(TAG_END == x)         ? "TAG_END" \
+  :(ATTR_EQ == x)         ? "ATTR_EQ" \
+  :(ATTR_NAME == x)       ? "ATTR_NAME" \
+  :(ATTR_VALUE == x)      ? "ATTR_VALUE" \
+  :(CONTENT == x)         ? "CONTENT" \
+  :(CONTENT_STYLE == x)   ? "CONTENT_STYLE" \
+  :(CONTENT_SCRIPT == x)  ? "CONTENT_SCRIPT" \
+  :(COMMENT == x)         ? "COMMENT" \
   : "???"
 
 typedef struct HTML_TOKEN token_t;

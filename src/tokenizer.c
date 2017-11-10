@@ -14,6 +14,24 @@
   #define OK(x) (x == 0)
 #endif
 
+#ifndef can_look_at
+  /**
+  * `true` if `pos - offset` is after the address of `html`, else `false`.
+  */
+  #define can_scan_at(s, loc) ( \
+    (loc < 0) ? ((s->end + loc) > s->html) \
+              : ((s->end - loc) > s->html) )
+#endif
+
+#ifndef count_padding
+  #define scan_padding(s) ({ \
+    s->pad = 0; \
+    while(isspace(*s->pos)) s->pos++; \
+    s->pad = (s->pos - s->lpos); \
+    0; \
+  })
+#endif
+
 typedef struct scanner scanner;
 struct scanner {
   char* pos;
@@ -29,14 +47,14 @@ struct scanner {
   enum HTML_TOKEN_ID last_id;
   enum HTML_TAG_ID last_tag;
   bool strict_content;
+  void* mem;
+  size_t mem_size;
 };
 
 
 char* get_scan_ptr(scanner*, size_t);
 void finalize_scanner(scanner*, token_t*);
 char get_scan_char(scanner*, size_t);
-int hard_scan_space(scanner*);
-int soft_scan_space(scanner*);
 int emit_token(scanner*, int);
 
 static inline bool is_in_set(char c, char const* set) {
@@ -104,6 +122,8 @@ int emit_token(scanner* s, int token_id) {
   int span_size = (s->pos - s->lpos);
   int pad_len = s->pad;
   int str_len = span_size - s->pad;
+  char* token_ptr = (s->lpos + pad_len);
+  size_t required_mem = (size_t)(tok_size + pad_len + str_len + 3);
 
   #if 0
     debug_info(
@@ -131,20 +151,34 @@ int emit_token(scanner* s, int token_id) {
     return -1;
   }
 
-  char* token_ptr = (s->lpos + pad_len);
+  if(s->mem == NULL) {
+    s->mem = malloc(required_mem);
+    if(s->mem) {
+      s->mem_size = required_mem;
+    } else {
+      return -1;
+    }
+  }
 
-  void* ptr = calloc(1, tok_size + pad_len + str_len + 3);
-  if(ptr) {
+  if(s->mem_size < required_mem) {
+    void* ptr = realloc(s->mem, required_mem);
+    if(ptr) {
+      s->mem = ptr;
+      s->mem_size = required_mem;
+    } else {
+      return -1;
+    }
+  }
 
-    tok = (token_t*)ptr;
-    tok->pad = (char*)(ptr + tok_size + 1);
-    tok->str = (char*)(ptr + tok_size + 1 + pad_len + 1);
+  if(s->mem) {
+    memset(s->mem, 0, required_mem);
+    tok = (token_t*)s->mem;
+    tok->pad = (char*)(s->mem + tok_size + 1);
+    tok->str = (char*)(s->mem + tok_size + 1 + pad_len + 1);
     
     if(pad_len) {
-      //debug_where("%ld-PAD", pad_size);
       strncpy(tok->pad, s->lpos, pad_len);
     } else {
-      //debug_where("NULL-PAD");
       tok->pad[0] = '\0';
     }
     strncpy(tok->str, token_ptr, str_len);
@@ -156,7 +190,6 @@ int emit_token(scanner* s, int token_id) {
 
     s->cb(tok);
     finalize_scanner(s, tok);
-    free(tok);
 
   } else {
     debug_danger("scanner out of memory");
@@ -169,7 +202,7 @@ int scan_tag_end(scanner* s) {
   int status = -1;
 
   // if we get here we need to be in a tag
-  soft_scan_space(s);
+  scan_padding(s);
   while(s->pos < s->end) {
     switch(*s->pos) {
       case '?': // some stupid XML thing... we all hate you XML
@@ -225,7 +258,7 @@ int scan_comment(scanner* s) {
 
 int scan_tag_start(scanner* s) {
   int status = -1;
-  char* pos = get_scan_ptr(s, 0);
+  char* pos = s->pos;
   while(s->pos < s->end) {
 
     switch(*s->pos) {
@@ -257,14 +290,6 @@ int scan_tag_start(scanner* s) {
 }
 
 /**
-* `true` if `pos - offset` is after the address of `html`, else `false`.
-*/
-bool can_look_back(scanner* s, size_t offset) {
-  size_t current_offset = (s->pos - s->html);
-  return current_offset >= offset;
-}
-
-/**
 * Sets the `in_quote` flag based on the current character being evaluated.
 */
 void scan_escaped_text(scanner* s, char* ptr) {
@@ -279,7 +304,7 @@ void scan_escaped_text(scanner* s, char* ptr) {
 
     // last char is escape seq && we're not on the first character
     // we should never even get here on first char
-    bool is_escaped = (can_look_back(s, 1) && (get_scan_char(s, -1) == '\\'));
+    bool is_escaped = (can_scan_at(s, -1) && (get_scan_char(s, -1) == '\\'));
 
     if(c == s->quote_char && !is_escaped) {
       s->in_quote = false;
@@ -341,81 +366,36 @@ int scan_content(scanner* s) {
   return status;
 }
 
-/**
-* WS can occur at semantically irrelevant places all over HTML, 
-* it doesn't count as a token - but is necessary to reconstruct the original
-* HTML without "reconstituting" it.
-*/
-int soft_scan_space(scanner* s) {
-
-  char* pos = s->pos;
-  int pad = 0;
-  while((pos < s->end) && isspace(*pos)) {
-    pos++;
-    pad++;
-  }
-
-  s->pad = pad;
-
-  return 0;
-}
-
-int hard_scan_space(scanner* s) {
-
-  soft_scan_space(s);
-  s->pos += s->pad;
-
-  return 0;
-}
-
 int scan_attr_name(scanner* s) {
-  #if 0
-    debug_where("enter");
-  #endif
 
   int id = ATTR_NAME;
   if(s->last_id == TAG_START || s->last_id == TAG_START_CLOSE) {
     id = TAG_NAME;
   }
 
-  int status = soft_scan_space(s);
-  if(OK(status)) {
+  int status = -1;
 
-    char* pos = get_scan_ptr(s, 0);
-    while(pos < s->end && is_name_char(*pos)) {
-      pos++;
-    }
-    if(pos > get_scan_ptr(s, 0)) {
-      s->pos = pos;
-      status = emit_token(s, id);
-    } else {
-      debug_warning("expected name chars, found nothing");
-      status = -1;
-    }
+  scan_padding(s);
+  while(s->pos < s->end && is_name_char(*s->pos)) {
+    s->pos++;
+  }
+  if(s->lpos < s->pos) {
+    status = emit_token(s, id);
+  } else {
+    debug_warning("expected name chars, found nothing");
+    status = -1;
   }
 
-  #if 0
-    debug_where("exit");
-  #endif
   return status;
 }
 
 int scan_attr_value(scanner* s) {
   int status = -1;
 
-  soft_scan_space(s);
+  scan_padding(s);
   bool value_ever = false;
   while(s->pos < s->end) {
     char c = *s->pos;
-
-    #if 0
-      debug_where("in attr_value loop");
-    #endif
-
-    if(value_ever == false && isspace(c)) {
-      s->pos++;
-      continue;
-    }
 
     if(is_quote_char(c)) {
       scan_escaped_text(s, s->pos);
@@ -463,7 +443,7 @@ int scan_attribute(scanner* s) {
   int status = scan_attr_name(s);
   if(OK(status)) {
     // we have a name, now scan for assignment to value
-    soft_scan_space(s);
+    scan_padding(s);
     while(s->pos < s->end) {
 
       #if 0
@@ -510,7 +490,7 @@ int scan_attributes(scanner * s) {
     status = scan_attribute(s);
     if(OK(status)) {
       // look for signs of end, or continue
-      soft_scan_space(s);
+      scan_padding(s);
       switch(get_scan_char(s, 0)) {
         case '/':
         case '>':
@@ -592,7 +572,9 @@ int scan_html(char* html, int size, token_cb cb) {
     .in_quote = false,
     .cb   = cb,
     .last_id = -1,
-    .last_tag = -1
+    .last_tag = -1,
+    .mem = NULL,
+    .mem_size = 0
   };
 
   if(s.cb) {
@@ -606,6 +588,12 @@ int scan_html(char* html, int size, token_cb cb) {
     debug_warning("No callback provided");
     errno = EINVAL;
     status = -1;
+  }
+
+  if(s.mem) {
+    free(s.mem);
+    s.mem = NULL;
+    s.mem_size = 0;
   }
 
   return status;
