@@ -1,34 +1,38 @@
 
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include "debug.h"
 #include "tinyxml.h"
 
-char* read_file(char* path) {
+int read_file(char* path, char** html, int* out_size) {
+  int status = -1;
   size_t size;
   size_t bytes_read;
-  char* buffer = 0;
   
   FILE* fp = fopen(path, "rb");
   if(fp) {
     fseek(fp, 0, SEEK_END);
     size = ftell(fp);
     rewind(fp);
-    buffer = malloc(size);
-    
-    if(buffer) {
-      bytes_read = fread(buffer, 1, size, fp);
+    *html = malloc(size+1);
+    if(*html) {
+      bytes_read = fread(*html, 1, size, fp);
       if(size == bytes_read) {
         debug_where("finished reading %lu from %s", size, path);
+        *out_size = bytes_read;
+        status = 0;
       } else {
         debug_warning("failed to read %s", path);
+        free(*html);
+        *html = NULL;
       }
     }
     
     fclose(fp);
   }
   
-  return buffer;
+  return status;
 }
 
 int main(int argc, char** argv) {
@@ -41,23 +45,18 @@ int main(int argc, char** argv) {
   int status = 0;
   for(int i = 1; i < argc; i++) {
     char* path = argv[i];
-    doc_t doc;
-    yyscan_t scanner;
-    YY_BUFFER_STATE state;
 
-    status = yylex_init(&scanner);
-    if(OK(status)) {
-      char* xml = read_file(path);
-      if(xml) {
-        state = yy_scan_string(xml, scanner);
-        
-        status = yyparse(&doc, scanner);
-        if(OK(status)) {
-          debug_success("parse complete");
-        }
-        yy_delete_buffer(state, scanner);
+    char* html = NULL;
+    int size = 0;
+    status = read_file(path, &html, &size);
+    if(OK(status) && html) {
+
+      status = parse_html(html, size);
+      if(OK(status)) {
+        debug_success("parse success");
       }
-      yylex_destroy(scanner);
+
+      free(html);
     }
 
     if(!OK(status)) {
