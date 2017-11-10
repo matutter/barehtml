@@ -1,4 +1,9 @@
-# libtinyxml
-### A flex & bison demo of parsing`xml` in C. 
+# Bare HTML
+### A bare-bones custom HTML parser in C
 
-WIP
+
+## Build
+
+```
+make clean main.test
+```
