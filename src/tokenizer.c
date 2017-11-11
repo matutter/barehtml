@@ -9,6 +9,7 @@
 #include "debug.h"
 #include "tag_id.h"
 #include "tokenizer.h"
+#include "source_map.h"
 
 #ifndef OK
   #define OK(x) (x == 0)
@@ -40,7 +41,8 @@ struct scanner {
   char* html;
   char* end;
   int pad;
-  token_cb cb;
+  source_map_fn map_fn;
+  void* arg;
   bool in_quote;
   char quote_char;
   bool bail_out;
@@ -51,10 +53,12 @@ struct scanner {
 
 
 char* get_scan_ptr(scanner*, size_t);
-void finalize_scanner(scanner*, token_t*);
+void finalize_scanner(scanner*, int, char*);
 char get_scan_char(scanner*, size_t);
 int emit_token(scanner*, int);
 int get_content_type(enum HTML_TAG_ID id);
+int get_source_map(enum HTML_TOKEN_ID id);
+
 
 static inline bool is_in_set(char c, char const* set) {
   while(*set) {
@@ -86,13 +90,13 @@ static inline bool is_attr_value_char(char c) {
 /**
 * Called after a token is emitted.
 */
-void finalize_scanner(scanner* s, token_t* tok) {
+void finalize_scanner(scanner* s, int id, char* str) {
 
-  if(tok->id == TAG_NAME) {
+  if(id == TAG_NAME) {
     if(s->last_id == TAG_START_CLOSE) {
       s->parent_tag_id = -1;
     } else {
-      s->parent_tag_id =  html_lookup_tag_id(tok->str);
+      s->parent_tag_id =  html_lookup_tag_id(str);
     }
 
     if(s->parent_tag_id == TAG_SCRIPT || s->parent_tag_id == TAG_STYLE) {
@@ -100,8 +104,7 @@ void finalize_scanner(scanner* s, token_t* tok) {
     }
   }
 
-
-  s->last_id = tok->id;
+  s->last_id = id;
   s->pad = 0;
   s->lpos = s->pos;
   s->quote_char = '\0';
@@ -129,16 +132,15 @@ int emit_token(scanner* s, int token_id) {
     return -1;
   }
 
-  token_t tok = { 0 };
-  tok.id = token_id;
-  tok.gc = 0;
-  tok.str = (s->lpos + pad_len);
-  tok.pad = s->lpos;
-  tok.str_len = str_len;
-  tok.pad_len = pad_len;
+  source_map_t sm = { 0 };
+  sm.id = get_source_map(token_id);
+  sm.text = token_ptr;
+  sm.text_size = str_len;
+  sm.ws = s->lpos;
+  sm.ws_size = pad_len;
 
-  s->cb(&tok);
-  finalize_scanner(s, &tok);
+  s->map_fn(&sm, s->arg);
+  finalize_scanner(s, token_id, token_ptr);
 
   return 0;
 } 
@@ -196,6 +198,7 @@ int scan_comment(scanner* s) {
     }
   } else {
     debug_warning("scanner not at beginning of comment");
+    status = -1;
   }
 
   return status;
@@ -508,7 +511,26 @@ int scan_document(scanner* s) {
   return status;
 }
 
-int scan_html(char* html, int size, token_cb cb) {
+int get_source_map(enum HTML_TOKEN_ID id) {
+  switch(id) {
+    case TAG_START:
+    case TAG_START_CLOSE:
+    case TAG_END:
+      return HTML_ANCHOR;
+    case TAG_NAME:       return HTML_TAG_NAME;
+    case ATTR_NAME:      return HTML_ATTR_NAME;
+    case ATTR_EQ:        return HTML_ATTR_EQ;
+    case ATTR_VALUE:     return HTML_ATTR_VALUE;
+    case CONTENT_SCRIPT: return HTML_CONTENT_SCRIPT;
+    case CONTENT_STYLE:  return HTML_CONTENT_STYLE;
+    case CONTENT:        return HTML_CONTENT_TEXT;
+    case COMMENT:        return HTML_COMMENT;
+    case HTML_END:       return 0;
+    default:             return -1;
+  }
+}
+
+int scan_html(char* html, int size, source_map_fn map_fn, void* arg) {
   int status = -1;
 
   scanner s = {
@@ -518,13 +540,14 @@ int scan_html(char* html, int size, token_cb cb) {
     .lpos = html,
     .end  = (html + size),
     .in_quote = false,
-    .cb   = cb,
+    .map_fn   = map_fn,
+    .arg = arg,
     .last_id = -1,
     .parent_tag_id = TAG_NOT_A_TAG,
     .strict_content = false
   };
 
-  if(s.cb) {
+  if(s.map_fn) {
 
     status = scan_document(&s);
     if(OK(status)) {
