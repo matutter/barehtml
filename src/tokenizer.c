@@ -33,8 +33,8 @@
   })
 #endif
 
-typedef struct scanner scanner;
-struct scanner {
+typedef struct SCANNER_GUTS scanner;
+struct SCANNER_GUTS {
   char* pos;
   char* lpos;
   int size;
@@ -121,6 +121,7 @@ char get_scan_char(scanner* s, size_t offset) {
 
 int emit_token(scanner* s, int token_id) {
 
+  int status = -1;
   int span_size = (s->pos - s->lpos);
   int pad_len = s->pad;
   int str_len = span_size - s->pad;
@@ -138,11 +139,18 @@ int emit_token(scanner* s, int token_id) {
   sm.text_size = str_len;
   sm.ws = s->lpos;
   sm.ws_size = pad_len;
+  sm.size = span_size;
 
-  s->map_fn(&sm, s->arg);
-  finalize_scanner(s, token_id, token_ptr);
+  status = s->map_fn(&sm, s->arg);
+  if(OK(status)) {
+    finalize_scanner(s, token_id, token_ptr);
+  } else {
+    debug_warning("source_map_fn return status %d, leaving scanner...", status);
+    s->bail_out = true;
+    status = -1;
+  }
 
-  return 0;
+  return status;
 } 
 
 int scan_tag_end(scanner* s) {

@@ -1,7 +1,11 @@
 #ifndef HTML_SOURCE_MAP_H
 #define HTML_SOURCE_MAP_H
 
+/**
+* Identifies parts of syntax
+*/
 enum HTML_MAP_ID {
+  HTML_DOCUMENT       = 100,
   HTML_ANCHOR         = 10,
   HTML_TAG_NAME       = 20,
   HTML_ATTR_NAME      = 30,
@@ -25,13 +29,19 @@ struct HTML_SOURCE_MAP {
   enum HTML_MAP_ID id;
 
   // pointer to any leading whitespace before certain parts of HTML
-  char* ws;
+  union {
+    char* ws;
+    // anonymous union just for semantics
+    char* ptr;    
+  };
   int ws_size;
 
   // the start of content, not including leading whitespace
   char* text;
   int text_size;
 
+  // complete size, including whitespace
+  int size;
 };
 
 typedef int (* source_map_fn)(source_map_t*, void*);
