@@ -31,6 +31,11 @@ struct PARSER_GUTS {
 };
 
 int get_memory_guess(char*, char*, int*, int*);
+char* get_highlight(int);
+int increase_parser_memory(parser*, char*, char*);
+int insert_source_map(parser*, source_map_t*);
+
+static int reallocs = 0;
 
 /**
 * 
@@ -62,7 +67,6 @@ char * get_highlight(int id) {
 int increase_parser_memory(parser* p, char* p1, char* p2) {
 
   int status = -1;
-
   int required_mem = 0;
   int item_count = 0;
   void* ptr = NULL;
@@ -73,8 +77,10 @@ int increase_parser_memory(parser* p, char* p1, char* p2) {
     int total_mem = required_mem + p->sm.size;
     ptr = realloc(p->sm.list, total_mem);
     if(ptr) {
-
-      debug_success("source map increased was: %d, increased: %d", p->sm.limit, item_count);
+      reallocs++;
+      #if 0
+        debug_success("source map increased was: %d, increased: %d", p->sm.limit, item_count);
+      #endif
 
       p->sm.limit += item_count;
       p->sm.size = total_mem;
@@ -122,48 +128,59 @@ int map_fn(source_map_t* sm, void* arg) {
 
   status = insert_source_map(p, sm);
 
-  /*printf(
-    "%s%.*s%.*s" KRST
-    , get_highlight(sm->id)
-    , sm->ws_size, sm->ws
-    , sm->text_size, sm->text
-  );*/
-
   return status;
 }
 
+/**
+* Guess at how much memory is required to create `source_map_t` for the HTML 
+* that is within the area of memory between `p1` and `p2`. The guess is made
+* by counting the amount of closing tags used in the string.
+*
+* @param p1 - The start of the HTML string.
+* @param p2 - The start of the HTML string.
+* @param item_count - Approximately how many `source_map_t` are required.
+* @param required_mem - How much memory is required to fit `item_count` elements.
+*/
 int get_memory_guess(char* p1, char* p2, int* item_count, int* required_mem) {
 
-  if(p1 >= p2) {
+  if(p1 > p2) {
     debug_danger("p1: %p, p2: %p", p1, p2);
     errno = EINVAL;
     return -1;
   }
 
-  // figure that a document will contain a lot of `<div> </div>` so we'll
-  // guess that the ideal number of source_map_t we need is
-  // remaining = (p2 - p1)
-  // number = (remaining - (remaining % 12))
-  const int avg_map = 26;
-  const int size = sizeof(source_map_t);
-  const int length = (p2 - p1);
-  *item_count = (length - (length % avg_map)) / avg_map;
+  // weirdly enough this constantly happens, often 1 short
+  if(p1 == p2) {
+    *item_count = 1;
+    *required_mem = sizeof(source_map_t);
+    return 0;
+  }
 
-  if(*item_count < 10) *item_count = 10;
+  const int factor = 3;
+  int count = factor;
+  char* ptr = p1;
+  while(ptr++ < p2) {
+    if(*ptr == '>') count+=factor; 
+  }
 
-  *required_mem = *item_count * size;
+  *item_count = count;
+  *required_mem = *item_count * sizeof(source_map_t);
 
-  debug_info(
-    "per-item: %d, remaining: %d, items: %d, memory: %d"
-    , size
-    , length
-    , *item_count
-    , *required_mem
-  );
+  #if 0
+    debug_info(
+      "input: %d, count: %d, mem: %d"
+      , (p2 - p1)
+      , *item_count
+      , *required_mem
+    );
+  #endif
 
   return 0;
 }
 
+/**
+* 
+*/
 int parse_html(char* html, int html_size) {
   int status = -1;
 
@@ -176,7 +193,7 @@ int parse_html(char* html, int html_size) {
 
   status = get_memory_guess(html, end, &item_count, &required_mem);
   if(!OK(status)) {
-    debug_warning("Invalid inital memory calculation for source map.");
+    debug_warning("Invalid initial memory calculation for source map.");
     return -1;
   }
 
@@ -196,21 +213,42 @@ int parse_html(char* html, int html_size) {
   if(OK(status)) {
     debug_success("scanner exited");
 
-    debug_info("\n"
-      " - map used: %d\n"
-      " - map limit: %d\n"
-      KBOLD " - map free: %d\n"
-      KRST KDIM "----------------------\n" KRST KCYN
-      " - mem total: %d\n"
-      " - mem used: %d\n"
-      KBOLD " - mem free: %d"
-      , p.sm.idx
-      , p.sm.limit
-      , (p.sm.limit - p.sm.idx)
-      , p.sm.size
-      , (p.sm.idx * (int)sizeof(source_map_t))
-      , (p.sm.size - (p.sm.idx * (int)sizeof(source_map_t)))
-    );
+    #if 1
+
+      for(int i = 0; i < p.sm.idx; i++) {
+        source_map_t* sm = &p.sm.list[i];
+        printf(
+          //"(%d)"
+          "%s%.*s%.*s" KRST
+          //, sm->id
+          , get_highlight(sm->id)
+          , sm->ws_size, sm->ws
+          , sm->text_size, sm->text
+        );
+      }
+
+    #endif
+
+    #if 0
+      debug_info("\n"
+        " - map used: %d\n"
+        " - map limit: %d\n"
+        KBOLD " > map free: %d\n"
+        KRST KDIM "----------------------\n" KRST KCYN
+        " - mem total: %d\n"
+        " - mem used: %d\n"
+        KBOLD " > mem free: %d\n"
+        KRST KDIM "----------------------\n" KRST KCYN
+        KBOLD " > reallocs: %d"
+        , p.sm.idx
+        , p.sm.limit
+        , (p.sm.limit - p.sm.idx)
+        , p.sm.size
+        , (p.sm.idx * (int)sizeof(source_map_t))
+        , (p.sm.size - (p.sm.idx * (int)sizeof(source_map_t)))
+        , reallocs
+      );
+    #endif
 
   } else {
     debug_warning("scanner encountered an error");
