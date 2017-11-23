@@ -18,29 +18,25 @@ main.test: test/main.c src/tinyxml.c src/tokenizer.o src/tag_id.o
 | ${CC} ${CCFLAGS} ${CINCL} -o $@ $^
 
 test: main.test
-| ./main.test test/*.html 
+| ${bootstrap} ./$< test/*.html
 
 test-1: main.test
-| ./$< test/sample1.html 
+| ${bootstrap} ./$< test/sample1.html
 
 test-2: main.test
-| ./$< test/sample2.html 
+| ${bootstrap} ./$< test/sample2.html
 
 test-3: main.test
-| ./$< test/so.html
+| ${bootstrap} ./$< test/so.html
 
 test-4: main.test
-| ./$< test/*.html
+| ${bootstrap} ./$< test/*.html
 
 grind-test: main.test
-| valgrind ./$< test/sample1.html 
+| valgrind ./$< test/sample1.html
 
 grind-test-2: main.test
 | valgrind ./$< test/*.html
 
 clean:
-| rm -f main.test src/tokenizer.o 
-
-
-
-
+| rm -f main.test src/tokenizer.o
