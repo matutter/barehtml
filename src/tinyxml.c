@@ -16,6 +16,7 @@ struct PARSER_GUTS {
     char* html;
   };
   char* end_ptr;
+  int html_size;
 
   struct {
     source_map_t* list;
@@ -143,6 +144,11 @@ int map_fn(source_map_t* sm, void* arg) {
 */
 int get_memory_guess(char* p1, char* p2, int* item_count, int* required_mem) {
 
+  if(!p1 || !p2) {
+    debug_warning("null pointer cannot be referenced");
+    return -1;
+  }
+
   if(p1 > p2) {
     debug_danger("p1: %p, p2: %p", p1, p2);
     errno = EINVAL;
@@ -158,9 +164,9 @@ int get_memory_guess(char* p1, char* p2, int* item_count, int* required_mem) {
 
   const int factor = 3;
   int count = factor;
-  char* ptr = p1;
-  while(ptr++ < p2) {
-    if(*ptr == '>') count+=factor; 
+  while(p1 < p2) {
+    if(*p1 == '>') count += factor;
+    p1++;
   }
 
   *item_count = count;
@@ -178,45 +184,70 @@ int get_memory_guess(char* p1, char* p2, int* item_count, int* required_mem) {
   return 0;
 }
 
-/**
-* 
-*/
-int parse_html(char* html, int html_size) {
-  int status = -1;
-
-  debug_info("parsing document %d", html_size);
+void* open_html_parser(char* html, int html_size) {
 
   char* end = (html + html_size);
   int required_mem = 0;
   int item_count = 0;
-  void* ptr = NULL;
+  parser* p = NULL;
 
-  status = get_memory_guess(html, end, &item_count, &required_mem);
+  int status = get_memory_guess(html, end, &item_count, &required_mem);
   if(!OK(status)) {
-    debug_warning("Invalid initial memory calculation for source map.");
-    return -1;
+    debug_warning("invalid initial memory calculation for source map");
+    errno = EINVAL;
+    return NULL;
   }
 
-  ptr = calloc(1, required_mem);
-  parser p = {
-    .html = html,
-    .end_ptr = end,
-    .sm = {
-      .list = ptr,
-      .idx = 0,
-      .limit = item_count,
-      .size = required_mem
-    }
-  };
+  p = malloc(sizeof(parser));
+  if(!p) {
+    debug_danger("failed to allocate parser context");
+    return NULL;
+  }
 
-  status = scan_html(html, html_size, map_fn, &p);
+  p->sm.list = calloc(1, required_mem); 
+  if(p->sm.list) {
+
+    p->sm.limit = item_count; 
+    p->sm.size = required_mem; 
+    p->sm.idx = 0;
+    p->html = html;
+    p->html_size = html_size;
+    p->end_ptr = end;
+
+    debug_info(
+      "created parser:%p, doc:%p, size:%d"
+      , p
+      , p->html
+      , p->html_size
+    );
+
+  } else {
+    debug_danger("failed to allocate initial memory");
+    free(p);
+    p = NULL;
+  }
+
+  return (void*)p;
+}
+
+/**
+* 
+*/
+int parse_html(void* user_ctx) {
+  int status = -1;
+
+  parser* p = (parser*)user_ctx;
+
+  debug_info("parsing %p", p);
+
+  status = scan_html(p->html, p->html_size, map_fn, p);
   if(OK(status)) {
     debug_success("scanner exited");
 
     #if 1
 
-      for(int i = 0; i < p.sm.idx; i++) {
-        source_map_t* sm = &p.sm.list[i];
+      for(int i = 0; i < p->sm.idx; i++) {
+        source_map_t* sm = &p->sm.list[i];
         printf(
           //"(%d)"
           "%s%.*s%.*s" KRST
@@ -240,12 +271,12 @@ int parse_html(char* html, int html_size) {
         KBOLD " > mem free: %d\n"
         KRST KDIM "----------------------\n" KRST KCYN
         KBOLD " > reallocs: %d"
-        , p.sm.idx
-        , p.sm.limit
-        , (p.sm.limit - p.sm.idx)
-        , p.sm.size
-        , (p.sm.idx * (int)sizeof(source_map_t))
-        , (p.sm.size - (p.sm.idx * (int)sizeof(source_map_t)))
+        , p->sm.idx
+        , p->sm.limit
+        , (p->sm.limit - p->sm.idx)
+        , p->sm.size
+        , (p->sm.idx * (int)sizeof(source_map_t))
+        , (p->sm.size - (p->sm.idx * (int)sizeof(source_map_t)))
         , reallocs
       );
     #endif
@@ -256,3 +287,22 @@ int parse_html(char* html, int html_size) {
 
   return status;
 }
+
+void close_html_parser(void** user_ctx) {
+
+  if(!*user_ctx) {
+    return;
+  }
+
+  parser* ctx = *(parser**)user_ctx;
+
+  if(ctx) {
+    if(ctx->sm.list) {
+      free(ctx->sm.list);
+    }
+    free(ctx);
+    *user_ctx = NULL;
+  }
+
+}
+
