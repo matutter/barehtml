@@ -17,6 +17,8 @@
   #if defined(DEBUG_ON)
 
     #include <stdio.h>
+    #include <errno.h>
+    #include <string.h>
     #define debug(fmt, args...) \
       dbg(KBOLD "%s:%d" KSEP fmt KRST "\n", __func__, __LINE__, ##args);
 
@@ -62,6 +64,9 @@
 
   #define dbg_success(fmt, args...) \
     dbg( KGRN fmt, ##args)
+
+  #define debug_errno(fmt, args...) \
+    dbg( KMAG "(%d) %s " fmt, errno, strerror(errno), ##args)
 
   #define dbg_token() \
     dbg("%s", yytext)
