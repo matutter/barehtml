@@ -7,3 +7,4 @@ build/
 *.yy.h
 *.output
 main.test
+grind.log
