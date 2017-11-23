@@ -51,10 +51,21 @@ int main(int argc, char** argv) {
     status = read_file(path, &html, &size);
     if(OK(status) && html) {
 
-      status = parse_html(html, size);
-      if(OK(status)) {
-        debug_success("parse success");
+      void* ctx = open_html_parser(html, size);
+      if(ctx) {
+
+        status = parse_html(ctx);
+        if(OK(status)) {
+          debug_success("parse success");
+        } else {
+          debug_warning("parse failed");
+        }
+
+        close_html_parser(&ctx);
+      } else {
+        debug_errno();
       }
+
 
       free(html);
     }
@@ -63,7 +74,6 @@ int main(int argc, char** argv) {
       break;
     }
   }
-
 
   return status;
 }
