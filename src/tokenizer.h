@@ -4,6 +4,7 @@
 
 #include "source_map.h"
 
+// TODO: Repace this use of this enum with HTML_SOURCE_MAP_H
 enum HTML_TOKEN_ID {
   TAG_START      = 10,
   TAG_START_CLOSE= 11,

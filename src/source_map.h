@@ -1,12 +1,23 @@
 #ifndef HTML_SOURCE_MAP_H
 #define HTML_SOURCE_MAP_H
 
+typedef struct HTML_GRAMMAR_TABLE table_t;
+struct HTML_GRAMMAR_TABLE {
+  // row
+  int** rules;
+  // sub tables
+  table_t* sub;
+};
+
 /**
 * Identifies parts of syntax
 */
 enum HTML_MAP_ID {
   HTML_DOCUMENT       = 100,
-  HTML_ANCHOR         = 10,
+  HTML_TAG_START      = 10,
+  HTML_TAG_END        = 11,
+  HTML_TAG_VOID_START = 12,
+  HTML_TAG_VOID_END   = 13,
   HTML_TAG_NAME       = 20,
   HTML_ATTR_NAME      = 30,
   HTML_ATTR_EQ        = 40,

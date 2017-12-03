@@ -5,7 +5,7 @@
 #include "tokenizer.h"
 #include "source_map.h"
 #include "dom_tree.h"
-#include "tinyxml.h"
+#include "bhtml.h"
 #include "debug.h"
 
 typedef struct PARSER_GUTS parser;
@@ -44,7 +44,9 @@ static int reallocs = 0;
 char * get_highlight(int id) {
 
   switch(id) {
-    case HTML_ANCHOR:         return KDIM KBLU;
+    case HTML_TAG_VOID_END:
+    case HTML_TAG_END:
+    case HTML_TAG_START:      return KDIM KBLU;
     case HTML_TAG_NAME:       return KBOLD KCYN;
     case HTML_ATTR_NAME:      return KCYN;
     case HTML_ATTR_EQ:        return KBOLD KWHT;
@@ -104,6 +106,7 @@ int insert_source_map(parser* p, source_map_t* sm) {
   int status = -1;
 
   if(p->sm.idx >= p->sm.limit) {
+
     status = increase_parser_memory(p, sm->ptr, p->end_ptr);
     if(!OK(status)) {
       debug_danger("failed to increase parser memory");
@@ -138,14 +141,16 @@ int map_fn(source_map_t* sm, void* arg) {
 * by counting the amount of closing tags used in the string.
 *
 * @param p1 - The start of the HTML string.
-* @param p2 - The start of the HTML string.
-* @param item_count - Approximately how many `source_map_t` are required.
-* @param required_mem - How much memory is required to fit `item_count` elements.
+* @param p2 - The end of the HTML string.
+* @param item_count - Returns approximately how many `source_map_t` are required.
+* @param required_mem - Returns how much memory is required to fit `item_count` elements.
+* @return 0 on success else failure and errno is set.
 */
 int get_memory_guess(char* p1, char* p2, int* item_count, int* required_mem) {
 
   if(!p1 || !p2) {
     debug_warning("null pointer cannot be referenced");
+    errno = EINVAL;
     return -1;
   }
 

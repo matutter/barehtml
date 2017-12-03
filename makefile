@@ -5,7 +5,7 @@ CC    = gcc
 CINCL = -Isrc
 CCFLAGS = -DDEBUG_ON -Wfatal-errors -g -ggdb
 
-#tinyxml.o: src/tinyxml.c src/tinyxml.yy.c src/tinyxml.tab.c
+#bhtml.o: src/bhtml.c src/bhtml.yy.c src/bhtml.tab.c
 #| ${CC} -c ${CCFLAGS} -fPIC ${CINCL} -o $@ $^
 
 src/tokenizer.o: src/tokenizer.c
@@ -14,7 +14,7 @@ src/tokenizer.o: src/tokenizer.c
 src/tag_id.o: src/tag_id.c
 | ${CC} -c ${CCFLAGS} -fPIC ${CINCL} -o $@ $^
 
-main.test: test/main.c src/tinyxml.c src/tokenizer.o src/tag_id.o
+main.test: test/main.c src/bhtml.c src/tokenizer.o src/tag_id.o
 | ${CC} ${CCFLAGS} ${CINCL} -o $@ $^
 
 test: main.test

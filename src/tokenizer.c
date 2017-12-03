@@ -229,8 +229,11 @@ int scan_tag_start(scanner* s) {
       default:
         if(pos < s->pos) {
 
+          // TODO: Recognize HTML_TAG_VOID_CLOSE
+
           int id = TAG_START;
           if(s->lpos == strstr(s->lpos, "</")) {
+            // TODO: Replace with HTML_TAG_VOID_START
             id = TAG_START_CLOSE;
           }
 
@@ -521,10 +524,9 @@ int scan_document(scanner* s) {
 
 int get_source_map(enum HTML_TOKEN_ID id) {
   switch(id) {
-    case TAG_START:
-    case TAG_START_CLOSE:
-    case TAG_END:
-      return HTML_ANCHOR;
+    case TAG_START:      return HTML_TAG_START;
+    case TAG_START_CLOSE: return HTML_TAG_VOID_END;
+    case TAG_END:        return HTML_TAG_END;
     case TAG_NAME:       return HTML_TAG_NAME;
     case ATTR_NAME:      return HTML_ATTR_NAME;
     case ATTR_EQ:        return HTML_ATTR_EQ;

@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "debug.h"
-#include "tinyxml.h"
+#include "bhtml.h"
 
 int read_file(char* path, char** html, int* out_size) {
   int status = -1;
